@@ -1,0 +1,16 @@
+{
+  "functions": {
+    "src/app/api/monitor/route.ts": {
+      "maxDuration": 30
+    },
+    "src/app/api/monitor/check-all/route.ts": {
+      "maxDuration": 60
+    }
+  },
+  "crons": [
+    {
+      "path": "/api/monitor/check-all",
+      "schedule": "0 9 * * *"
+    }
+  ]
+}
