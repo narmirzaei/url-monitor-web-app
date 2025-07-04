@@ -104,7 +104,18 @@ async function checkSingleUrl(urlId: number) {
   }
 }
 
+export async function GET() {
+  // Test endpoint to verify the route is working
+  return NextResponse.json({
+    message: 'Check frequent endpoint is working',
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV
+  })
+}
+
 export async function POST() {
+  console.log('🕐 Frequent cron job triggered at:', new Date().toISOString())
+  
   try {
     // Check URLs that need frequent monitoring (1-5 minutes)
     const frequentUrls = await prisma.monitoredUrl.findMany({
@@ -117,6 +128,8 @@ export async function POST() {
       select: { id: true, checkInterval: true, lastCheck: true }
     })
 
+    console.log(`📊 Found ${frequentUrls.length} frequent URLs to check`)
+
     const urlsDueForCheck = frequentUrls.filter((url: { id: number; checkInterval: number; lastCheck: Date | null }) => {
       if (!url.lastCheck) return true
       
@@ -125,20 +138,26 @@ export async function POST() {
       const isDue = timeSinceLastCheck >= intervalMs
       
       if (isDue) {
-        console.log(`Frequent URL ${url.id} is due. Interval: ${url.checkInterval}min`)
+        console.log(`✅ Frequent URL ${url.id} is due. Interval: ${url.checkInterval}min, Time since last check: ${Math.round(timeSinceLastCheck / 60000)}min`)
+      } else {
+        console.log(`⏳ Frequent URL ${url.id} not due yet. Interval: ${url.checkInterval}min, Time since last check: ${Math.round(timeSinceLastCheck / 60000)}min`)
       }
       
       return isDue
     })
 
+    console.log(`🎯 ${urlsDueForCheck.length} frequent URLs are due for checking`)
+
     const results = []
 
     for (const url of urlsDueForCheck) {
       try {
+        console.log(`🔍 Checking frequent URL ${url.id}...`)
         const result = await checkSingleUrl(url.id)
         results.push({ urlId: url.id, ...result })
+        console.log(`✅ Frequent URL ${url.id} check completed:`, result.success ? 'SUCCESS' : 'FAILED')
       } catch (error) {
-        console.error(`Failed to check frequent URL ${url.id}:`, error)
+        console.error(`❌ Failed to check frequent URL ${url.id}:`, error)
         results.push({ 
           urlId: url.id, 
           success: false, 
@@ -147,15 +166,18 @@ export async function POST() {
       }
     }
 
+    console.log(`🏁 Frequent cron job completed. Checked: ${urlsDueForCheck.length}, Results:`, results)
+
     return NextResponse.json({
       success: true,
       checkedUrls: urlsDueForCheck.length,
       totalFrequentUrls: frequentUrls.length,
-      results
+      results,
+      timestamp: new Date().toISOString()
     })
 
   } catch (error) {
-    console.error('Error in check-frequent API:', error)
+    console.error('❌ Error in check-frequent API:', error)
     return NextResponse.json({ error: 'Failed to check frequent URLs' }, { status: 500 })
   }
 } 

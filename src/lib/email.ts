@@ -25,7 +25,7 @@ export async function sendChangeNotification(monitoredUrl: any, checkResult: any
           <h3 style="margin: 0 0 10px 0; color: #1f2937;">URL Details</h3>
           <p><strong>Name:</strong> ${monitoredUrl.name}</p>
           <p><strong>URL:</strong> <a href="${monitoredUrl.url}" style="color: #2563eb;">${monitoredUrl.url}</a></p>
-          <p><strong>Check Time:</strong> ${new Date(checkResult.check_time).toLocaleString()}</p>
+          <p><strong>Check Time:</strong> ${new Date(checkResult.checkTime).toLocaleString()}</p>
         </div>
 
         <div style="background-color: #fef3c7; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #f59e0b;">
@@ -35,7 +35,7 @@ export async function sendChangeNotification(monitoredUrl: any, checkResult: any
 
         <div style="background-color: #f9fafb; padding: 20px; border-radius: 8px; margin: 20px 0;">
           <h3 style="margin: 0 0 10px 0; color: #1f2937;">Content Preview</h3>
-          <p style="font-size: 14px; color: #6b7280; font-family: monospace; white-space: pre-wrap;">${checkResult.content_preview}</p>
+          <p style="font-size: 14px; color: #6b7280; font-family: monospace; white-space: pre-wrap;">${checkResult.contentPreview || 'No content preview available'}</p>
         </div>
 
         <div style="text-align: center; margin: 30px 0;">
