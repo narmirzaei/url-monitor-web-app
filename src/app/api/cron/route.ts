@@ -106,7 +106,7 @@ async function checkSingleUrl(urlId: number) {
             urlId,
             changesDetected: false // Get the last successful check
           },
-          orderBy: { createdAt: 'desc' }
+          orderBy: { checkTime: 'desc' }
         })
         
         const previousContent = previousCheck?.contentPreview || 'No previous content available'
