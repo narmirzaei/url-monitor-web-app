@@ -106,27 +106,26 @@ async function checkSingleUrl(urlId: number) {
 
 export async function POST() {
   try {
-    // Check URLs that need less frequent monitoring (more than 5 minutes)
-    const urlsToCheck = await prisma.monitoredUrl.findMany({
+    // Check URLs that need frequent monitoring (1-5 minutes)
+    const frequentUrls = await prisma.monitoredUrl.findMany({
       where: {
         isActive: true,
         checkInterval: {
-          gt: 5 // More than 5 minutes
+          lte: 5 // 5 minutes or less
         }
       },
       select: { id: true, checkInterval: true, lastCheck: true }
     })
 
-    // Filter URLs that are actually due for checking based on their individual intervals
-    const urlsDueForCheck = urlsToCheck.filter((url: { id: number; checkInterval: number; lastCheck: Date | null }) => {
-      if (!url.lastCheck) return true // Never checked before
+    const urlsDueForCheck = frequentUrls.filter((url: { id: number; checkInterval: number; lastCheck: Date | null }) => {
+      if (!url.lastCheck) return true
       
-      const intervalMs = url.checkInterval * 60000 // Convert minutes to milliseconds
+      const intervalMs = url.checkInterval * 60000
       const timeSinceLastCheck = Date.now() - url.lastCheck.getTime()
       const isDue = timeSinceLastCheck >= intervalMs
       
       if (isDue) {
-        console.log(`URL ${url.id} is due for check. Interval: ${url.checkInterval}min, Last check: ${url.lastCheck.toISOString()}, Time since: ${Math.round(timeSinceLastCheck / 60000)}min`)
+        console.log(`Frequent URL ${url.id} is due. Interval: ${url.checkInterval}min`)
       }
       
       return isDue
@@ -139,7 +138,7 @@ export async function POST() {
         const result = await checkSingleUrl(url.id)
         results.push({ urlId: url.id, ...result })
       } catch (error) {
-        console.error(`Failed to check URL ${url.id}:`, error)
+        console.error(`Failed to check frequent URL ${url.id}:`, error)
         results.push({ 
           urlId: url.id, 
           success: false, 
@@ -151,12 +150,12 @@ export async function POST() {
     return NextResponse.json({
       success: true,
       checkedUrls: urlsDueForCheck.length,
-      totalLessFrequentUrls: urlsToCheck.length,
+      totalFrequentUrls: frequentUrls.length,
       results
     })
 
   } catch (error) {
-    console.error('Error in check-all API:', error)
-    return NextResponse.json({ error: 'Failed to check URLs' }, { status: 500 })
+    console.error('Error in check-frequent API:', error)
+    return NextResponse.json({ error: 'Failed to check frequent URLs' }, { status: 500 })
   }
-}
+} 

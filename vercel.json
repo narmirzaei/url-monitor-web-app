@@ -11,6 +11,10 @@
   },
   "crons": [
     {
+      "path": "/api/monitor/check-frequent",
+      "schedule": "* * * * *"
+    },
+    {
       "path": "/api/monitor/check-all",
       "schedule": "*/15 * * * *"
     }
