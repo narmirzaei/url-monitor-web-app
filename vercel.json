@@ -12,7 +12,7 @@
   "crons": [
     {
       "path": "/api/monitor/check-all",
-      "schedule": "0 9 * * *"
+      "schedule": "*/15 * * * *"
     }
   ],
   "env": {
