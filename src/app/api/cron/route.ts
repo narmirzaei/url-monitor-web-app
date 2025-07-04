@@ -133,8 +133,19 @@ export async function POST() {
       
       const intervalMs = url.checkInterval * 60000 // Convert minutes to milliseconds
       const timeSinceLastCheck = Date.now() - url.lastCheck.getTime()
-      const isDue = timeSinceLastCheck >= intervalMs
       
+      // For very frequent checks (1-5 minutes), be more lenient with timing
+      let isDue: boolean
+      if (url.checkInterval <= 5) {
+        // For frequent checks, allow checking if it's been at least 80% of the interval
+        const minTimeMs = intervalMs * 0.8
+        isDue = timeSinceLastCheck >= minTimeMs
+      } else {
+        // For less frequent checks, use the full interval
+        isDue = timeSinceLastCheck >= intervalMs
+      }
+      
+      // For debugging: log all URLs and their status
       if (isDue) {
         console.log(`✅ URL ${url.id} is due for check. Interval: ${url.checkInterval}min, Time since last check: ${Math.round(timeSinceLastCheck / 60000)}min`)
       } else {
@@ -145,6 +156,14 @@ export async function POST() {
     })
 
     console.log(`🎯 ${urlsDueForCheck.length} URLs are due for checking`)
+    
+    // Log summary of all URLs
+    console.log('📋 Summary of all URLs:')
+    allActiveUrls.forEach((url: { id: number; checkInterval: number; lastCheck: Date | null }) => {
+      const timeSinceLastCheck = url.lastCheck ? Math.round((Date.now() - url.lastCheck.getTime()) / 60000) : 'Never'
+      const isDue = urlsDueForCheck.some((u: { id: number; checkInterval: number; lastCheck: Date | null }) => u.id === url.id)
+      console.log(`  URL ${url.id}: Interval=${url.checkInterval}min, Last check=${timeSinceLastCheck}min ago, Due=${isDue}`)
+    })
 
     const results = []
 
