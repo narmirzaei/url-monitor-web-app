@@ -6,13 +6,25 @@ import { sendChangeNotification } from '@/lib/email'
 
 // Vercel logging function
 function log(message: string) {
-  // Use console.log for local development
-  console.log(message)
+  // Force immediate logging for Vercel
+  const timestamp = new Date().toISOString()
+  const logMessage = `[CRON-${timestamp}] ${message}`
   
-  // For Vercel, we need to ensure logs are flushed
-  if (process.env.NODE_ENV === 'production') {
-    // Force flush logs in production
-    console.log(`[CRON] ${message}`)
+  // Multiple logging approaches to ensure visibility
+  console.log(logMessage)
+  console.error(logMessage) // Error logs are more likely to show up
+  process.stdout.write(logMessage + '\n')
+  
+  // Also log to stderr which Vercel might capture better
+  process.stderr.write(logMessage + '\n')
+  
+  // Try to write to a file as backup (this might not work in Vercel but worth trying)
+  try {
+    const fs = require('fs')
+    const logFile = '/tmp/cron-logs.txt'
+    fs.appendFileSync(logFile, logMessage + '\n')
+  } catch (e) {
+    // Ignore file write errors
   }
 }
 
@@ -154,14 +166,25 @@ async function checkSingleUrl(urlId: number) {
 
 export async function GET() {
   // Test endpoint to verify the route is working
+  const testMessage = 'Cron endpoint is working - GET request received'
+  console.log(`[CRON-TEST] ${testMessage}`)
+  console.error(`[CRON-TEST-ERROR] ${testMessage}`)
+  
   return NextResponse.json({
-    message: 'Cron endpoint is working',
+    message: testMessage,
     timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV
+    environment: process.env.NODE_ENV,
+    logs: 'Check Vercel function logs for [CRON-TEST] messages'
   })
 }
 
 export async function POST() {
+  // Immediate logging to verify the function is called
+  console.log('[CRON-IMMEDIATE] POST function called')
+  console.error('[CRON-IMMEDIATE-ERROR] POST function called')
+  process.stdout.write('[CRON-IMMEDIATE-STDOUT] POST function called\n')
+  process.stderr.write('[CRON-IMMEDIATE-STDERR] POST function called\n')
+  
   log('🚀 ==========================================')
   log('🚀 CRON JOB STARTED')
   log('🚀 ==========================================')
