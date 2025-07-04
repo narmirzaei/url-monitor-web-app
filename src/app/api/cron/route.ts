@@ -47,7 +47,7 @@ async function checkSingleUrl(urlId: number) {
       where: { id: urlId },
       data: {
         lastContentHash: contentHash,
-        lastCheck: new Date()
+        lastCheck: new Date() // This will be stored as UTC in the database
       }
     })
 
@@ -60,7 +60,7 @@ async function checkSingleUrl(urlId: number) {
             urlId,
             checkId: checkResult.id,
             emailSent: true,
-            emailSentAt: new Date(),
+            emailSentAt: new Date(), // UTC timestamp
             changesSummary: 'Content changes detected'
           }
         })
@@ -114,7 +114,11 @@ export async function GET() {
 }
 
 export async function POST() {
-  console.log('🕐 Cron job triggered at:', new Date().toISOString())
+  const now = new Date()
+  console.log('🕐 Cron job triggered at:', now.toISOString())
+  console.log('🌍 Current timezone offset:', now.getTimezoneOffset(), 'minutes')
+  console.log('🕐 Local time:', now.toString())
+  console.log('🕐 UTC time:', now.toISOString())
   
   try {
     // Get all active URLs
@@ -132,7 +136,12 @@ export async function POST() {
       if (!url.lastCheck) return true // Never checked before
       
       const intervalMs = url.checkInterval * 60000 // Convert minutes to milliseconds
-      const timeSinceLastCheck = Date.now() - url.lastCheck.getTime()
+      
+      // Use UTC time for consistent calculations
+      // Vercel cron jobs run in UTC, so we need to ensure all time calculations are in UTC
+      const nowUtc = new Date().getTime()
+      const lastCheckUtc = url.lastCheck.getTime()
+      const timeSinceLastCheck = nowUtc - lastCheckUtc
       
       // For very frequent checks (1-5 minutes), be more lenient with timing
       let isDue: boolean
@@ -145,11 +154,12 @@ export async function POST() {
         isDue = timeSinceLastCheck >= intervalMs
       }
       
-      // For debugging: log all URLs and their status
+      // For debugging: log all URLs and their status with UTC timestamps
+      const lastCheckUtcString = url.lastCheck.toISOString()
       if (isDue) {
-        console.log(`✅ URL ${url.id} is due for check. Interval: ${url.checkInterval}min, Time since last check: ${Math.round(timeSinceLastCheck / 60000)}min`)
+        console.log(`✅ URL ${url.id} is due for check. Interval: ${url.checkInterval}min, Time since last check: ${Math.round(timeSinceLastCheck / 60000)}min, Last check (UTC): ${lastCheckUtcString}`)
       } else {
-        console.log(`⏳ URL ${url.id} not due yet. Interval: ${url.checkInterval}min, Time since last check: ${Math.round(timeSinceLastCheck / 60000)}min`)
+        console.log(`⏳ URL ${url.id} not due yet. Interval: ${url.checkInterval}min, Time since last check: ${Math.round(timeSinceLastCheck / 60000)}min, Last check (UTC): ${lastCheckUtcString}`)
       }
       
       return isDue
@@ -160,10 +170,18 @@ export async function POST() {
     // Log summary of all URLs
     console.log('📋 Summary of all URLs:')
     allActiveUrls.forEach((url: { id: number; checkInterval: number; lastCheck: Date | null }) => {
-      const timeSinceLastCheck = url.lastCheck ? Math.round((Date.now() - url.lastCheck.getTime()) / 60000) : 'Never'
+      const timeSinceLastCheck = url.lastCheck ? Math.round((new Date().getTime() - url.lastCheck.getTime()) / 60000) : 'Never'
       const isDue = urlsDueForCheck.some((u: { id: number; checkInterval: number; lastCheck: Date | null }) => u.id === url.id)
-      console.log(`  URL ${url.id}: Interval=${url.checkInterval}min, Last check=${timeSinceLastCheck}min ago, Due=${isDue}`)
+      const lastCheckUtc = url.lastCheck ? url.lastCheck.toISOString() : 'Never'
+      console.log(`  URL ${url.id}: Interval=${url.checkInterval}min, Last check=${timeSinceLastCheck}min ago (UTC: ${lastCheckUtc}), Due=${isDue}`)
     })
+    
+    // Additional timezone debugging
+    console.log('🕐 Timezone Debug Info:')
+    console.log('  - Vercel cron jobs run in UTC')
+    console.log('  - Database timestamps are stored in UTC')
+    console.log('  - All time calculations use UTC timestamps')
+    console.log('  - Current UTC time:', new Date().toISOString())
 
     const results = []
 
