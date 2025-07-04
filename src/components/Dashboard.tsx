@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { URLCard } from './URLCard'
 import { AddURLForm } from './AddURLForm'
+import { authenticatedFetch } from '@/lib/api'
 
 interface MonitoredURL {
   id: number
@@ -18,7 +19,11 @@ interface MonitoredURL {
   last_error: string | null
 }
 
-export function Dashboard() {
+interface DashboardProps {
+  onLogout?: () => void
+}
+
+export function Dashboard({ onLogout }: DashboardProps) {
   const [urls, setUrls] = useState<MonitoredURL[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -28,7 +33,7 @@ export function Dashboard() {
   const fetchUrls = async () => {
     try {
       setError(null)
-      const response = await fetch('/api/urls')
+      const response = await authenticatedFetch('/api/urls')
       
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`)
@@ -52,7 +57,7 @@ export function Dashboard() {
 
   const handleAddURL = async (urlData: { url: string; name: string; checkInterval: number }) => {
     try {
-      const response = await fetch('/api/urls', {
+      const response = await authenticatedFetch('/api/urls', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(urlData)
@@ -74,7 +79,7 @@ export function Dashboard() {
   const handleCheckAll = async () => {
     setCheckingAll(true)
     try {
-      const response = await fetch('/api/monitor/check-all', {
+      const response = await authenticatedFetch('/api/monitor/check-all', {
         method: 'POST'
       })
       
@@ -94,7 +99,7 @@ export function Dashboard() {
 
   const handleDeleteURL = async (id: number) => {
     try {
-      const response = await fetch(`/api/urls/${id}`, {
+      const response = await authenticatedFetch(`/api/urls/${id}`, {
         method: 'DELETE'
       })
 
@@ -115,7 +120,7 @@ export function Dashboard() {
       const url = urls.find(u => u.id === id)
       if (!url) return
 
-      const response = await fetch(`/api/urls/${id}`, {
+      const response = await authenticatedFetch(`/api/urls/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -138,7 +143,7 @@ export function Dashboard() {
 
   const handleManualCheck = async (id: number) => {
     try {
-      const response = await fetch('/api/monitor', {
+      const response = await authenticatedFetch('/api/monitor', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ urlId: id })
@@ -296,6 +301,17 @@ export function Dashboard() {
               </svg>
               <span>Add New URL</span>
             </button>
+            {onLogout && (
+              <button
+                onClick={onLogout}
+                className="btn-secondary inline-flex items-center space-x-2"
+              >
+                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M3 3a1 1 0 00-1 1v12a1 1 0 102 0V4a1 1 0 00-1-1zm10.293 9.293a1 1 0 001.414 1.414l3-3a1 1 0 000-1.414l-3-3a1 1 0 10-1.414 1.414L14.586 9H7a1 1 0 100 2h7.586l-1.293 1.293z" clipRule="evenodd" />
+                </svg>
+                <span>Logout</span>
+              </button>
+            )}
           </div>
         </div>
       </div>

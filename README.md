@@ -100,9 +100,36 @@ SENDGRID_API_KEY=your_sendgrid_api_key_here
 NOTIFICATION_EMAIL=your-email@example.com
 FROM_EMAIL=noreply@yourdomain.com
 
+# Authentication
+BASIC_AUTH_USERNAME=admin
+BASIC_AUTH_PASSWORD=your-secure-password-here
+
 # Vercel Configuration
 VERCEL_URL=your-vercel-url.vercel.app
 ```
+
+## 🔐 Authentication
+
+This app uses basic authentication to protect your URLs. To set up authentication:
+
+### Setup
+
+1. **Add environment variables** to your Vercel project:
+   - `BASIC_AUTH_USERNAME` (default: `admin`)
+   - `BASIC_AUTH_PASSWORD` (required for protection)
+
+2. **Default credentials**:
+   - Username: `admin` (or set via `BASIC_AUTH_USERNAME`)
+   - Password: Set via `BASIC_AUTH_PASSWORD` environment variable
+
+3. **Local development**: Create a `.env.local` file with the same variables
+
+### Security Notes
+
+- If no password is set, authentication will be disabled (useful for development)
+- Credentials are stored in browser localStorage for convenience
+- API endpoints are protected by middleware
+- Cron jobs continue to work without authentication
 
 ## Technology Stack
 
