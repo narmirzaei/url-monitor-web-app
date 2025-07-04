@@ -1,28 +1,34 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { sql } from '@vercel/postgres'
-import { initializeDatabase } from '@/lib/db'
+import { prisma } from '@/lib/prisma'
 
 export async function GET() {
   try {
-    await initializeDatabase()
-    
-    const result = await sql`
-      SELECT 
-        mu.*,
-        uc.check_time as last_check_time,
-        uc.changes_detected as last_changes_detected,
-        uc.error_message as last_error
-      FROM monitored_urls mu
-      LEFT JOIN url_checks uc ON mu.id = uc.url_id 
-        AND uc.check_time = (
-          SELECT MAX(check_time) 
-          FROM url_checks 
-          WHERE url_id = mu.id
-        )
-      ORDER BY mu.created_at DESC
-    `
+    const urls = await prisma.monitoredUrl.findMany({
+      include: {
+        urlChecks: {
+          orderBy: { checkTime: 'desc' },
+          take: 1
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    })
 
-    return NextResponse.json({ urls: result.rows })
+    const urlsWithLastCheck = urls.map(url => ({
+      id: url.id,
+      url: url.url,
+      name: url.name,
+      check_interval: url.checkInterval,
+      is_active: url.isActive,
+      last_check: url.lastCheck,
+      last_content_hash: url.lastContentHash,
+      created_at: url.createdAt,
+      updated_at: url.updatedAt,
+      last_check_time: url.urlChecks[0]?.checkTime || null,
+      last_changes_detected: url.urlChecks[0]?.changesDetected || null,
+      last_error: url.urlChecks[0]?.errorMessage || null
+    }))
+
+    return NextResponse.json({ urls: urlsWithLastCheck })
   } catch (error) {
     console.error('Error fetching URLs:', error)
     return NextResponse.json({ error: 'Failed to fetch URLs' }, { status: 500 })
@@ -31,21 +37,21 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    await initializeDatabase()
-    
     const { url, name, checkInterval } = await request.json()
 
     if (!url || !name) {
       return NextResponse.json({ error: 'URL and name are required' }, { status: 400 })
     }
 
-    const result = await sql`
-      INSERT INTO monitored_urls (url, name, check_interval)
-      VALUES (${url}, ${name}, ${checkInterval || 60})
-      RETURNING *
-    `
+    const newUrl = await prisma.monitoredUrl.create({
+      data: {
+        url,
+        name,
+        checkInterval: checkInterval || 60
+      }
+    })
 
-    return NextResponse.json({ url: result.rows[0] }, { status: 201 })
+    return NextResponse.json({ url: newUrl }, { status: 201 })
   } catch (error) {
     console.error('Error creating URL:', error)
     return NextResponse.json({ error: 'Failed to create URL' }, { status: 500 })

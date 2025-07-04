@@ -21,16 +21,30 @@ interface MonitoredURL {
 export function Dashboard() {
   const [urls, setUrls] = useState<MonitoredURL[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [showAddForm, setShowAddForm] = useState(false)
   const [checkingAll, setCheckingAll] = useState(false)
 
   const fetchUrls = async () => {
     try {
+      setError(null)
       const response = await fetch('/api/urls')
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+      }
+      
       const data = await response.json()
-      setUrls(data.urls)
+      
+      if (data.error) {
+        throw new Error(data.error)
+      }
+      
+      setUrls(data.urls || [])
     } catch (error) {
       console.error('Error fetching URLs:', error)
+      setError(error instanceof Error ? error.message : 'Failed to fetch URLs')
+      setUrls([]) // Ensure urls is always an array
     } finally {
       setLoading(false)
     }
@@ -47,9 +61,13 @@ export function Dashboard() {
       if (response.ok) {
         setShowAddForm(false)
         fetchUrls()
+      } else {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to add URL')
       }
     } catch (error) {
       console.error('Error adding URL:', error)
+      setError(error instanceof Error ? error.message : 'Failed to add URL')
     }
   }
 
@@ -62,9 +80,13 @@ export function Dashboard() {
       
       if (response.ok) {
         await fetchUrls()
+      } else {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to check URLs')
       }
     } catch (error) {
       console.error('Error checking all URLs:', error)
+      setError(error instanceof Error ? error.message : 'Failed to check URLs')
     } finally {
       setCheckingAll(false)
     }
@@ -78,9 +100,13 @@ export function Dashboard() {
 
       if (response.ok) {
         fetchUrls()
+      } else {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to delete URL')
       }
     } catch (error) {
       console.error('Error deleting URL:', error)
+      setError(error instanceof Error ? error.message : 'Failed to delete URL')
     }
   }
 
@@ -100,9 +126,13 @@ export function Dashboard() {
 
       if (response.ok) {
         fetchUrls()
+      } else {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to toggle URL')
       }
     } catch (error) {
       console.error('Error toggling URL:', error)
+      setError(error instanceof Error ? error.message : 'Failed to toggle URL')
     }
   }
 
@@ -116,9 +146,13 @@ export function Dashboard() {
 
       if (response.ok) {
         fetchUrls()
+      } else {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to check URL')
       }
     } catch (error) {
       console.error('Error checking URL:', error)
+      setError(error instanceof Error ? error.message : 'Failed to check URL')
     }
   }
 
@@ -130,6 +164,37 @@ export function Dashboard() {
     return (
       <div className="flex justify-center items-center h-64">
         <div className="text-lg">Loading...</div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="space-y-6">
+        <div className="flex justify-between items-center">
+          <h1 className="text-3xl font-bold">URL Monitor Dashboard</h1>
+        </div>
+        
+        <div className="bg-red-50 border border-red-300 rounded-lg p-6">
+          <h2 className="text-xl font-semibold text-red-800 mb-2">Configuration Error</h2>
+          <p className="text-red-700 mb-4">{error}</p>
+          
+          <div className="bg-red-100 rounded p-4 mb-4">
+            <h3 className="font-semibold text-red-800 mb-2">Setup Required:</h3>
+            <ol className="list-decimal list-inside text-red-700 space-y-1">
+              <li>Add PostgreSQL database in Vercel dashboard</li>
+              <li>Environment variables should be automatically configured</li>
+              <li>Refresh this page after setup</li>
+            </ol>
+          </div>
+          
+          <button
+            onClick={fetchUrls}
+            className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded"
+          >
+            Retry Connection
+          </button>
+        </div>
       </div>
     )
   }
@@ -167,7 +232,7 @@ export function Dashboard() {
         ))}
       </div>
 
-      {urls.length === 0 && (
+      {urls.length === 0 && !error && (
         <div className="text-center py-12">
           <p className="text-gray-500 text-lg">No URLs being monitored yet.</p>
           <button

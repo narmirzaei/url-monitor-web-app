@@ -1,0 +1,61 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("POSTGRES_URL")
+}
+
+model MonitoredUrl {
+  id              Int          @id @default(autoincrement())
+  url             String
+  name            String
+  checkInterval   Int          @default(60) @map("check_interval")
+  isActive        Boolean      @default(true) @map("is_active")
+  lastCheck       DateTime?    @map("last_check")
+  lastContentHash String?      @map("last_content_hash")
+  createdAt       DateTime     @default(now()) @map("created_at")
+  updatedAt       DateTime     @default(now()) @updatedAt @map("updated_at")
+
+  urlChecks       UrlCheck[]
+  notifications   Notification[]
+
+  @@map("monitored_urls")
+}
+
+model UrlCheck {
+  id              Int          @id @default(autoincrement())
+  urlId           Int          @map("url_id")
+  contentHash     String       @map("content_hash")
+  contentPreview  String?      @map("content_preview")
+  changesDetected Boolean      @default(false) @map("changes_detected")
+  checkTime       DateTime     @default(now()) @map("check_time")
+  errorMessage    String?      @map("error_message")
+
+  monitoredUrl    MonitoredUrl @relation(fields: [urlId], references: [id], onDelete: Cascade)
+  notifications   Notification[]
+
+  @@map("url_checks")
+}
+
+model Notification {
+  id              Int          @id @default(autoincrement())
+  urlId           Int          @map("url_id")
+  checkId         Int          @map("check_id")
+  emailSent       Boolean      @default(false) @map("email_sent")
+  emailSentAt     DateTime?    @map("email_sent_at")
+  changesSummary  String?      @map("changes_summary")
+  createdAt       DateTime     @default(now()) @map("created_at")
+
+  monitoredUrl    MonitoredUrl @relation(fields: [urlId], references: [id], onDelete: Cascade)
+  urlCheck        UrlCheck     @relation(fields: [checkId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}

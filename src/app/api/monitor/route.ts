@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { sql } from '@vercel/postgres'
+import { prisma } from '@/lib/prisma'
 import { extractPageContent, generateContentHash } from '@/lib/browser'
 import { sendChangeNotification } from '@/lib/email'
 
@@ -11,70 +11,88 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'URL ID is required' }, { status: 400 })
     }
 
-    const urlResult = await sql`
-      SELECT * FROM monitored_urls 
-      WHERE id = ${urlId} AND is_active = true
-    `
+    const monitoredUrl = await prisma.monitoredUrl.findFirst({
+      where: { 
+        id: urlId,
+        isActive: true
+      }
+    })
 
-    if (urlResult.rows.length === 0) {
+    if (!monitoredUrl) {
       return NextResponse.json({ error: 'URL not found or inactive' }, { status: 404 })
     }
-
-    const monitoredUrl = urlResult.rows[0]
     
     try {
       const content = await extractPageContent(monitoredUrl.url)
       const contentHash = generateContentHash(content)
       
-      const previousHash = monitoredUrl.last_content_hash
+      const previousHash = monitoredUrl.lastContentHash
       const changesDetected = previousHash && previousHash !== contentHash
       
       const contentPreview = content.substring(0, 500) + (content.length > 500 ? '...' : '')
 
-      const checkResult = await sql`
-        INSERT INTO url_checks (url_id, content_hash, content_preview, changes_detected)
-        VALUES (${urlId}, ${contentHash}, ${contentPreview}, ${changesDetected})
-        RETURNING *
-      `
+      const checkResult = await prisma.urlCheck.create({
+        data: {
+          urlId,
+          contentHash,
+          contentPreview,
+          changesDetected: !!changesDetected
+        }
+      })
 
-      await sql`
-        UPDATE monitored_urls 
-        SET last_content_hash = ${contentHash}, last_check = CURRENT_TIMESTAMP
-        WHERE id = ${urlId}
-      `
+      await prisma.monitoredUrl.update({
+        where: { id: urlId },
+        data: {
+          lastContentHash: contentHash,
+          lastCheck: new Date()
+        }
+      })
 
       if (changesDetected) {
         try {
-          await sendChangeNotification(monitoredUrl, checkResult.rows[0])
+          await sendChangeNotification(monitoredUrl, checkResult)
           
-          await sql`
-            INSERT INTO notifications (url_id, check_id, email_sent, email_sent_at, changes_summary)
-            VALUES (${urlId}, ${checkResult.rows[0].id}, true, CURRENT_TIMESTAMP, 'Content changes detected')
-          `
+          await prisma.notification.create({
+            data: {
+              urlId,
+              checkId: checkResult.id,
+              emailSent: true,
+              emailSentAt: new Date(),
+              changesSummary: 'Content changes detected'
+            }
+          })
         } catch (emailError) {
           console.error('Failed to send notification:', emailError)
           
-          await sql`
-            INSERT INTO notifications (url_id, check_id, email_sent, changes_summary)
-            VALUES (${urlId}, ${checkResult.rows[0].id}, false, 'Content changes detected - email failed')
-          `
+          await prisma.notification.create({
+            data: {
+              urlId,
+              checkId: checkResult.id,
+              emailSent: false,
+              changesSummary: 'Content changes detected - email failed'
+            }
+          })
         }
       }
 
       return NextResponse.json({
         success: true,
-        changesDetected,
+        changesDetected: !!changesDetected,
         contentHash,
-        checkId: checkResult.rows[0].id
+        checkId: checkResult.id
       })
 
     } catch (error) {
       console.error('Error during content extraction:', error)
       
-      await sql`
-        INSERT INTO url_checks (url_id, content_hash, changes_detected, error_message)
-        VALUES (${urlId}, '', false, ${error instanceof Error ? error.message : 'Unknown error'})
-      `
+      await prisma.urlCheck.create({
+        data: {
+          urlId,
+          contentHash: '',
+          changesDetected: false,
+          errorMessage: error instanceof Error ? error.message : 'Unknown error'
+        }
+      })
 
       return NextResponse.json({
         success: false,

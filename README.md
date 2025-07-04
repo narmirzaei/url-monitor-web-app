@@ -94,12 +94,6 @@ A comprehensive web application for monitoring website content changes with inte
 ```env
 # Database (Vercel Postgres)
 POSTGRES_URL=
-POSTGRES_PRISMA_URL=
-POSTGRES_URL_NON_POOLING=
-POSTGRES_USER=
-POSTGRES_HOST=
-POSTGRES_PASSWORD=
-POSTGRES_DATABASE=
 
 # Email Configuration
 SENDGRID_API_KEY=your_sendgrid_api_key_here
@@ -116,7 +110,7 @@ VERCEL_URL=your-vercel-url.vercel.app
 - **TypeScript**: Type-safe JavaScript
 - **Tailwind CSS**: Utility-first CSS framework
 - **Playwright**: Browser automation for content extraction
-- **Vercel Postgres**: Serverless PostgreSQL database
+- **Prisma**: Type-safe database ORM with PostgreSQL
 - **SendGrid**: Email delivery service
 - **Vercel**: Deployment and hosting platform
 

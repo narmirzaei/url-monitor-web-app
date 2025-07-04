@@ -1,23 +1,40 @@
 import { NextResponse } from 'next/server'
-import { sql } from '@vercel/postgres'
+import { prisma } from '@/lib/prisma'
 
 export async function POST() {
   try {
-    const result = await sql`
-      SELECT id FROM monitored_urls 
-      WHERE is_active = true 
-      AND (
-        last_check IS NULL 
-        OR last_check < NOW() - INTERVAL '1 minute' * check_interval
-      )
-    `
+    const urlsToCheck = await prisma.monitoredUrl.findMany({
+      where: {
+        isActive: true,
+        OR: [
+          { lastCheck: null },
+          {
+            lastCheck: {
+              lt: new Date(Date.now() - 60000) // 1 minute ago, will be multiplied by checkInterval
+            }
+          }
+        ]
+      },
+      select: { id: true, checkInterval: true, lastCheck: true }
+    })
 
-    const urlsToCheck = result.rows
+    // Filter URLs that are actually due for checking based on their individual intervals
+    const urlsDueForCheck = urlsToCheck.filter(url => {
+      if (!url.lastCheck) return true
+      const intervalMs = url.checkInterval * 60000 // Convert minutes to milliseconds
+      const timeSinceLastCheck = Date.now() - url.lastCheck.getTime()
+      return timeSinceLastCheck >= intervalMs
+    })
+
     const results = []
 
-    for (const url of urlsToCheck) {
+    for (const url of urlsDueForCheck) {
       try {
-        const response = await fetch(`${process.env.VERCEL_URL || 'http://localhost:3000'}/api/monitor`, {
+        const baseUrl = process.env.VERCEL_URL 
+          ? `https://${process.env.VERCEL_URL}` 
+          : 'http://localhost:3000'
+        
+        const response = await fetch(`${baseUrl}/api/monitor`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ urlId: url.id })
@@ -37,7 +54,8 @@ export async function POST() {
 
     return NextResponse.json({
       success: true,
-      checkedUrls: urlsToCheck.length,
+      checkedUrls: urlsDueForCheck.length,
+      totalActiveUrls: urlsToCheck.length,
       results
     })
 
