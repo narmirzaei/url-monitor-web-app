@@ -1,34 +1,26 @@
 import { chromium, Browser, Page } from 'playwright'
 import crypto from 'crypto'
 
-let browser: Browser | null = null
-
 export async function getBrowser(): Promise<Browser> {
-  if (!browser) {
-    browser = await chromium.launch({
-      headless: true,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-gpu',
-        '--no-first-run',
-        '--no-zygote',
-        '--single-process',
-        '--disable-background-timer-throttling',
-        '--disable-backgrounding-occluded-windows',
-        '--disable-renderer-backgrounding'
-      ]
-    })
-  }
-  return browser
+  return await chromium.launch({
+    headless: true,
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-gpu',
+      '--no-first-run',
+      '--no-zygote',
+      '--single-process',
+      '--disable-background-timer-throttling',
+      '--disable-backgrounding-occluded-windows',
+      '--disable-renderer-backgrounding'
+    ]
+  })
 }
 
-export async function closeBrowser(): Promise<void> {
-  if (browser) {
-    await browser.close()
-    browser = null
-  }
+export async function closeBrowser(browser: Browser): Promise<void> {
+  await browser.close()
 }
 
 export async function dismissCookieConsent(page: Page): Promise<void> {
@@ -141,6 +133,7 @@ export async function extractPageContent(url: string): Promise<string> {
     return content
   } finally {
     await page.close()
+    await closeBrowser(browser)
   }
 }
 

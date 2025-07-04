@@ -1,0 +1,10 @@
+# Don't ignore these important files
+!.env*
+!tailwind.config.js
+!postcss.config.js
+!prisma/
+
+# Standard ignores
+node_modules
+.next
+.git 

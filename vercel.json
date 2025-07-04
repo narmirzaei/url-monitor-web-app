@@ -1,4 +1,6 @@
 {
+  "buildCommand": "npm run build",
+  "installCommand": "npm install",
   "functions": {
     "src/app/api/monitor/route.ts": {
       "maxDuration": 30
@@ -12,5 +14,8 @@
       "path": "/api/monitor/check-all",
       "schedule": "0 9 * * *"
     }
-  ]
+  ],
+  "env": {
+    "PLAYWRIGHT_BROWSERS_PATH": "0"
+  }
 }
