@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { extractPageContent, generateContentHash } from '@/lib/browser'
+import { extractContentSimple } from '@/lib/content-extractor'
 import { sendChangeNotification } from '@/lib/email'
 
 export async function POST(request: NextRequest) {
@@ -23,7 +24,16 @@ export async function POST(request: NextRequest) {
     }
     
     try {
-      const content = await extractPageContent(monitoredUrl.url)
+      let content: string
+      try {
+        // Try Playwright first
+        content = await extractPageContent(monitoredUrl.url)
+      } catch (playwrightError) {
+        console.log('Playwright failed, using fallback method:', playwrightError)
+        // Fallback to simple HTTP extraction
+        content = await extractContentSimple(monitoredUrl.url)
+      }
+      
       const contentHash = generateContentHash(content)
       
       const previousHash = monitoredUrl.lastContentHash
