@@ -4,11 +4,23 @@ import { extractPageContent, generateContentHash } from '@/lib/browser'
 import { extractContentSimple } from '@/lib/content-extractor'
 import { sendChangeNotification } from '@/lib/email'
 
+// Vercel logging function
+function log(message: string) {
+  // Use console.log for local development
+  console.log(message)
+  
+  // For Vercel, we need to ensure logs are flushed
+  if (process.env.NODE_ENV === 'production') {
+    // Force flush logs in production
+    console.log(`[CRON] ${message}`)
+  }
+}
+
 async function checkSingleUrl(urlId: number) {
-  console.log(`    🔍 checkSingleUrl(${urlId}) - Starting...`)
+  log(`    🔍 checkSingleUrl(${urlId}) - Starting...`)
   
   try {
-    console.log(`    📊 Fetching URL details from database...`)
+    log(`    📊 Fetching URL details from database...`)
     const monitoredUrl = await prisma.monitoredUrl.findFirst({
       where: { 
         id: urlId,
@@ -17,41 +29,41 @@ async function checkSingleUrl(urlId: number) {
     })
 
     if (!monitoredUrl) {
-      console.log(`    ❌ URL ${urlId} not found or inactive`)
+      log(`    ❌ URL ${urlId} not found or inactive`)
       return { success: false, error: 'URL not found or inactive' }
     }
     
-    console.log(`    ✅ URL found: ${monitoredUrl.name} (${monitoredUrl.url})`)
+    log(`    ✅ URL found: ${monitoredUrl.name} (${monitoredUrl.url})`)
     
-    console.log(`    🌐 Starting content extraction...`)
+    log(`    🌐 Starting content extraction...`)
     let content: string
     try {
-      console.log(`    🎭 Attempting Playwright extraction...`)
+      log(`    🎭 Attempting Playwright extraction...`)
       // Try Playwright first
       content = await extractPageContent(monitoredUrl.url)
-      console.log(`    ✅ Playwright extraction successful, content length: ${content.length} characters`)
+      log(`    ✅ Playwright extraction successful, content length: ${content.length} characters`)
     } catch (playwrightError) {
-      console.log(`    ⚠️  Playwright failed, using fallback method:`, playwrightError)
-      console.log(`    🔄 Attempting simple HTTP extraction...`)
+      log(`    ⚠️  Playwright failed, using fallback method: ${playwrightError}`)
+      log(`    🔄 Attempting simple HTTP extraction...`)
       // Fallback to simple HTTP extraction
       content = await extractContentSimple(monitoredUrl.url)
-      console.log(`    ✅ Fallback extraction successful, content length: ${content.length} characters`)
+      log(`    ✅ Fallback extraction successful, content length: ${content.length} characters`)
     }
     
-    console.log(`    🔐 Generating content hash...`)
+    log(`    🔐 Generating content hash...`)
     const contentHash = generateContentHash(content)
-    console.log(`    ✅ Content hash generated: ${contentHash.substring(0, 8)}...`)
+    log(`    ✅ Content hash generated: ${contentHash.substring(0, 8)}...`)
     
     const previousHash = monitoredUrl.lastContentHash
-    console.log(`    📊 Previous hash: ${previousHash ? previousHash.substring(0, 8) + '...' : 'None (first check)'}`)
+    log(`    📊 Previous hash: ${previousHash ? previousHash.substring(0, 8) + '...' : 'None (first check)'}`)
     
     const changesDetected = previousHash && previousHash !== contentHash
-    console.log(`    🔍 Changes detected: ${changesDetected ? 'YES' : 'NO'}`)
+    log(`    🔍 Changes detected: ${changesDetected ? 'YES' : 'NO'}`)
     
     const contentPreview = content.substring(0, 500) + (content.length > 500 ? '...' : '')
-    console.log(`    📝 Content preview generated (${contentPreview.length} chars)`)
+    log(`    📝 Content preview generated (${contentPreview.length} chars)`)
 
-    console.log(`    💾 Creating URL check record in database...`)
+    log(`    💾 Creating URL check record in database...`)
     const checkResult = await prisma.urlCheck.create({
       data: {
         urlId,
@@ -60,9 +72,9 @@ async function checkSingleUrl(urlId: number) {
         changesDetected: !!changesDetected
       }
     })
-    console.log(`    ✅ URL check record created with ID: ${checkResult.id}`)
+    log(`    ✅ URL check record created with ID: ${checkResult.id}`)
 
-    console.log(`    🔄 Updating URL last check timestamp...`)
+    log(`    🔄 Updating URL last check timestamp...`)
     await prisma.monitoredUrl.update({
       where: { id: urlId },
       data: {
@@ -70,16 +82,16 @@ async function checkSingleUrl(urlId: number) {
         lastCheck: new Date() // This will be stored as UTC in the database
       }
     })
-    console.log(`    ✅ URL last check timestamp updated`)
+    log(`    ✅ URL last check timestamp updated`)
 
     if (changesDetected) {
-      console.log(`    📧 Changes detected - sending email notification...`)
+      log(`    📧 Changes detected - sending email notification...`)
       try {
-        console.log(`    📤 Sending email via SendGrid...`)
+        log(`    📤 Sending email via SendGrid...`)
         await sendChangeNotification(monitoredUrl, checkResult)
-        console.log(`    ✅ Email sent successfully`)
+        log(`    ✅ Email sent successfully`)
         
-        console.log(`    💾 Creating notification record...`)
+        log(`    💾 Creating notification record...`)
         await prisma.notification.create({
           data: {
             urlId,
@@ -89,12 +101,12 @@ async function checkSingleUrl(urlId: number) {
             changesSummary: 'Content changes detected'
           }
         })
-        console.log(`    ✅ Notification record created`)
+        log(`    ✅ Notification record created`)
       } catch (emailError) {
-        console.error(`    ❌ Failed to send notification:`, emailError)
-        console.error(`    ❌ Email error details:`, emailError instanceof Error ? emailError.message : 'Unknown error')
+        log(`    ❌ Failed to send notification: ${emailError}`)
+        log(`    ❌ Email error details: ${emailError instanceof Error ? emailError.message : 'Unknown error'}`)
         
-        console.log(`    💾 Creating failed notification record...`)
+        log(`    💾 Creating failed notification record...`)
         await prisma.notification.create({
           data: {
             urlId,
@@ -103,13 +115,13 @@ async function checkSingleUrl(urlId: number) {
             changesSummary: 'Content changes detected - email failed'
           }
         })
-        console.log(`    ✅ Failed notification record created`)
+        log(`    ✅ Failed notification record created`)
       }
     } else {
-      console.log(`    ℹ️  No changes detected - skipping email notification`)
+      log(`    ℹ️  No changes detected - skipping email notification`)
     }
 
-    console.log(`    ✅ checkSingleUrl(${urlId}) - Completed successfully`)
+    log(`    ✅ checkSingleUrl(${urlId}) - Completed successfully`)
     return {
       success: true,
       changesDetected: !!changesDetected,
@@ -118,11 +130,11 @@ async function checkSingleUrl(urlId: number) {
     }
 
   } catch (error) {
-    console.error(`    ❌ checkSingleUrl(${urlId}) - Error during content extraction:`, error)
-    console.error(`    ❌ Error details:`, error instanceof Error ? error.message : 'Unknown error')
-    console.error(`    ❌ Error stack:`, error instanceof Error ? error.stack : 'No stack trace')
+    log(`    ❌ checkSingleUrl(${urlId}) - Error during content extraction: ${error}`)
+    log(`    ❌ Error details: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    log(`    ❌ Error stack: ${error instanceof Error ? error.stack : 'No stack trace'}`)
     
-    console.log(`    💾 Creating error record in database...`)
+    log(`    💾 Creating error record in database...`)
     await prisma.urlCheck.create({
       data: {
         urlId,
@@ -131,7 +143,7 @@ async function checkSingleUrl(urlId: number) {
         errorMessage: error instanceof Error ? error.message : 'Unknown error'
       }
     })
-    console.log(`    ✅ Error record created`)
+    log(`    ✅ Error record created`)
 
     return {
       success: false,
@@ -150,49 +162,49 @@ export async function GET() {
 }
 
 export async function POST() {
-  console.log('🚀 ==========================================')
-  console.log('🚀 CRON JOB STARTED')
-  console.log('🚀 ==========================================')
+  log('🚀 ==========================================')
+  log('🚀 CRON JOB STARTED')
+  log('🚀 ==========================================')
   
   const now = new Date()
-  console.log('🕐 Cron job triggered at:', now.toISOString())
-  console.log('🌍 Current timezone offset:', now.getTimezoneOffset(), 'minutes')
-  console.log('🕐 Local time:', now.toString())
-  console.log('🕐 UTC time:', now.toISOString())
-  console.log('🕐 Current timestamp (ms):', now.getTime())
+  log(`🕐 Cron job triggered at: ${now.toISOString()}`)
+  log(`🌍 Current timezone offset: ${now.getTimezoneOffset()} minutes`)
+  log(`🕐 Local time: ${now.toString()}`)
+  log(`🕐 UTC time: ${now.toISOString()}`)
+  log(`🕐 Current timestamp (ms): ${now.getTime()}`)
   
-  try {
-    console.log('📊 STEP 1: Fetching all active URLs from database...')
-    
-    // Get all active URLs
-    const allActiveUrls = await prisma.monitoredUrl.findMany({
-      where: {
-        isActive: true
-      },
-      select: { id: true, checkInterval: true, lastCheck: true }
-    })
+      try {
+      log('📊 STEP 1: Fetching all active URLs from database...')
+      
+      // Get all active URLs
+      const allActiveUrls = await prisma.monitoredUrl.findMany({
+        where: {
+          isActive: true
+        },
+        select: { id: true, checkInterval: true, lastCheck: true }
+      })
 
-    console.log(`📊 STEP 1 COMPLETE: Found ${allActiveUrls.length} active URLs`)
-    console.log('📋 Raw URL data from database:')
-    allActiveUrls.forEach((url: { id: number; checkInterval: number; lastCheck: Date | null }, index: number) => {
-      console.log(`  ${index + 1}. URL ID: ${url.id}, Interval: ${url.checkInterval}min, Last Check: ${url.lastCheck ? url.lastCheck.toISOString() : 'NULL'}`)
-    })
+      log(`📊 STEP 1 COMPLETE: Found ${allActiveUrls.length} active URLs`)
+      log('📋 Raw URL data from database:')
+      allActiveUrls.forEach((url: { id: number; checkInterval: number; lastCheck: Date | null }, index: number) => {
+        log(`  ${index + 1}. URL ID: ${url.id}, Interval: ${url.checkInterval}min, Last Check: ${url.lastCheck ? url.lastCheck.toISOString() : 'NULL'}`)
+      })
 
-    console.log('🔍 STEP 2: Analyzing each URL for timing...')
+      log('🔍 STEP 2: Analyzing each URL for timing...')
     
     // Filter URLs that are due for checking based on their individual intervals
     const urlsDueForCheck = allActiveUrls.filter((url: { id: number; checkInterval: number; lastCheck: Date | null }) => {
-      console.log(`\n🔍 ANALYZING URL ${url.id}:`)
-      console.log(`  - Check Interval: ${url.checkInterval} minutes`)
-      console.log(`  - Last Check: ${url.lastCheck ? url.lastCheck.toISOString() : 'NULL (never checked)'}`)
+      log(`\n🔍 ANALYZING URL ${url.id}:`)
+      log(`  - Check Interval: ${url.checkInterval} minutes`)
+      log(`  - Last Check: ${url.lastCheck ? url.lastCheck.toISOString() : 'NULL (never checked)'}`)
       
       if (!url.lastCheck) {
-        console.log(`  ✅ DECISION: URL ${url.id} has never been checked before - WILL CHECK`)
+        log(`  ✅ DECISION: URL ${url.id} has never been checked before - WILL CHECK`)
         return true // Never checked before
       }
       
       const intervalMs = url.checkInterval * 60000 // Convert minutes to milliseconds
-      console.log(`  - Interval in milliseconds: ${intervalMs}ms`)
+      log(`  - Interval in milliseconds: ${intervalMs}ms`)
       
       // Use UTC time for consistent calculations
       // Vercel cron jobs run in UTC, so we need to ensure all time calculations are in UTC
@@ -200,9 +212,9 @@ export async function POST() {
       const lastCheckUtc = url.lastCheck.getTime()
       const timeSinceLastCheck = nowUtc - lastCheckUtc
       
-      console.log(`  - Current UTC timestamp: ${nowUtc}`)
-      console.log(`  - Last check UTC timestamp: ${lastCheckUtc}`)
-      console.log(`  - Time since last check: ${timeSinceLastCheck}ms (${Math.round(timeSinceLastCheck / 60000)} minutes)`)
+      log(`  - Current UTC timestamp: ${nowUtc}`)
+      log(`  - Last check UTC timestamp: ${lastCheckUtc}`)
+      log(`  - Time since last check: ${timeSinceLastCheck}ms (${Math.round(timeSinceLastCheck / 60000)} minutes)`)
       
       // For very frequent checks (1-5 minutes), be more lenient with timing
       let isDue: boolean
@@ -219,70 +231,70 @@ export async function POST() {
         reason = `Less frequent check (>5min): Need ${url.checkInterval}min, have ${Math.round(timeSinceLastCheck / 60000)}min`
       }
       
-      console.log(`  - Decision logic: ${reason}`)
+      log(`  - Decision logic: ${reason}`)
       
       if (isDue) {
-        console.log(`  ✅ DECISION: URL ${url.id} IS DUE FOR CHECK`)
+        log(`  ✅ DECISION: URL ${url.id} IS DUE FOR CHECK`)
       } else {
-        console.log(`  ⏳ DECISION: URL ${url.id} NOT DUE YET`)
+        log(`  ⏳ DECISION: URL ${url.id} NOT DUE YET`)
       }
       
       return isDue
     })
 
-    console.log(`\n🎯 STEP 2 COMPLETE: ${urlsDueForCheck.length} URLs are due for checking`)
+    log(`\n🎯 STEP 2 COMPLETE: ${urlsDueForCheck.length} URLs are due for checking`)
     
     if (urlsDueForCheck.length === 0) {
-      console.log('⚠️  No URLs are due for checking at this time')
+      log('⚠️  No URLs are due for checking at this time')
     } else {
-      console.log('📋 URLs that will be checked:')
+      log('📋 URLs that will be checked:')
       urlsDueForCheck.forEach((url: { id: number; checkInterval: number; lastCheck: Date | null }, index: number) => {
-        console.log(`  ${index + 1}. URL ID: ${url.id}, Interval: ${url.checkInterval}min`)
+        log(`  ${index + 1}. URL ID: ${url.id}, Interval: ${url.checkInterval}min`)
       })
     }
     
     // Log summary of all URLs
-    console.log('\n📋 FINAL SUMMARY OF ALL URLs:')
+    log('\n📋 FINAL SUMMARY OF ALL URLs:')
     allActiveUrls.forEach((url: { id: number; checkInterval: number; lastCheck: Date | null }) => {
       const timeSinceLastCheck = url.lastCheck ? Math.round((new Date().getTime() - url.lastCheck.getTime()) / 60000) : 'Never'
       const isDue = urlsDueForCheck.some((u: { id: number; checkInterval: number; lastCheck: Date | null }) => u.id === url.id)
       const lastCheckUtc = url.lastCheck ? url.lastCheck.toISOString() : 'Never'
-      console.log(`  URL ${url.id}: Interval=${url.checkInterval}min, Last check=${timeSinceLastCheck}min ago (UTC: ${lastCheckUtc}), Due=${isDue}`)
+      log(`  URL ${url.id}: Interval=${url.checkInterval}min, Last check=${timeSinceLastCheck}min ago (UTC: ${lastCheckUtc}), Due=${isDue}`)
     })
     
     // Additional timezone debugging
-    console.log('\n🕐 TIMEZONE DEBUG INFO:')
-    console.log('  - Vercel cron jobs run in UTC')
-    console.log('  - Database timestamps are stored in UTC')
-    console.log('  - All time calculations use UTC timestamps')
-    console.log('  - Current UTC time:', new Date().toISOString())
+    log('\n🕐 TIMEZONE DEBUG INFO:')
+    log('  - Vercel cron jobs run in UTC')
+    log('  - Database timestamps are stored in UTC')
+    log('  - All time calculations use UTC timestamps')
+    log(`  - Current UTC time: ${new Date().toISOString()}`)
 
-    console.log('\n🔍 STEP 3: Starting URL checks...')
+    log('\n🔍 STEP 3: Starting URL checks...')
     const results = []
 
     for (const url of urlsDueForCheck) {
-      console.log(`\n🔍 CHECKING URL ${url.id}:`)
-      console.log(`  - Starting check at: ${new Date().toISOString()}`)
+      log(`\n🔍 CHECKING URL ${url.id}:`)
+      log(`  - Starting check at: ${new Date().toISOString()}`)
       
       try {
-        console.log(`  - Calling checkSingleUrl function...`)
+        log(`  - Calling checkSingleUrl function...`)
         const result = await checkSingleUrl(url.id)
         
-        console.log(`  - Check result received:`)
-        console.log(`    * Success: ${result.success}`)
-        console.log(`    * Changes Detected: ${result.changesDetected}`)
-        console.log(`    * Content Hash: ${result.contentHash ? result.contentHash.substring(0, 8) + '...' : 'N/A'}`)
-        console.log(`    * Check ID: ${result.checkId || 'N/A'}`)
+        log(`  - Check result received:`)
+        log(`    * Success: ${result.success}`)
+        log(`    * Changes Detected: ${result.changesDetected}`)
+        log(`    * Content Hash: ${result.contentHash ? result.contentHash.substring(0, 8) + '...' : 'N/A'}`)
+        log(`    * Check ID: ${result.checkId || 'N/A'}`)
         if (result.error) {
-          console.log(`    * Error: ${result.error}`)
+          log(`    * Error: ${result.error}`)
         }
         
         results.push({ urlId: url.id, ...result })
-        console.log(`  ✅ URL ${url.id} check completed: ${result.success ? 'SUCCESS' : 'FAILED'}`)
+        log(`  ✅ URL ${url.id} check completed: ${result.success ? 'SUCCESS' : 'FAILED'}`)
       } catch (error) {
-        console.error(`  ❌ Exception during URL ${url.id} check:`, error)
-        console.error(`  ❌ Error details:`, error instanceof Error ? error.message : 'Unknown error')
-        console.error(`  ❌ Error stack:`, error instanceof Error ? error.stack : 'No stack trace')
+        log(`  ❌ Exception during URL ${url.id} check: ${error}`)
+        log(`  ❌ Error details: ${error instanceof Error ? error.message : 'Unknown error'}`)
+        log(`  ❌ Error stack: ${error instanceof Error ? error.stack : 'No stack trace'}`)
         
         results.push({ 
           urlId: url.id, 
@@ -292,26 +304,26 @@ export async function POST() {
       }
     }
 
-    console.log(`\n🏁 STEP 3 COMPLETE: URL checking finished`)
-    console.log(`📊 FINAL STATISTICS:`)
-    console.log(`  - Total active URLs: ${allActiveUrls.length}`)
-    console.log(`  - URLs due for checking: ${urlsDueForCheck.length}`)
-    console.log(`  - URLs actually checked: ${results.length}`)
-    console.log(`  - Successful checks: ${results.filter(r => r.success).length}`)
-    console.log(`  - Failed checks: ${results.filter(r => !r.success).length}`)
-    console.log(`  - Changes detected: ${results.filter(r => r.changesDetected).length}`)
+    log(`\n🏁 STEP 3 COMPLETE: URL checking finished`)
+    log(`📊 FINAL STATISTICS:`)
+    log(`  - Total active URLs: ${allActiveUrls.length}`)
+    log(`  - URLs due for checking: ${urlsDueForCheck.length}`)
+    log(`  - URLs actually checked: ${results.length}`)
+    log(`  - Successful checks: ${results.filter(r => r.success).length}`)
+    log(`  - Failed checks: ${results.filter(r => !r.success).length}`)
+    log(`  - Changes detected: ${results.filter(r => r.changesDetected).length}`)
     
-    console.log(`\n📋 DETAILED RESULTS:`)
+    log(`\n📋 DETAILED RESULTS:`)
     results.forEach((result, index) => {
-      console.log(`  ${index + 1}. URL ${result.urlId}: ${result.success ? 'SUCCESS' : 'FAILED'}${result.changesDetected ? ' (CHANGES DETECTED)' : ''}`)
+      log(`  ${index + 1}. URL ${result.urlId}: ${result.success ? 'SUCCESS' : 'FAILED'}${result.changesDetected ? ' (CHANGES DETECTED)' : ''}`)
       if (result.error) {
-        console.log(`     Error: ${result.error}`)
+        log(`     Error: ${result.error}`)
       }
     })
     
-    console.log(`\n🚀 ==========================================`)
-    console.log(`🚀 CRON JOB COMPLETED SUCCESSFULLY`)
-    console.log(`🚀 ==========================================`)
+    log(`\n🚀 ==========================================`)
+    log(`🚀 CRON JOB COMPLETED SUCCESSFULLY`)
+    log(`🚀 ==========================================`)
 
     return NextResponse.json({
       success: true,
@@ -322,14 +334,14 @@ export async function POST() {
     })
 
   } catch (error) {
-    console.error('\n❌ ==========================================')
-    console.error('❌ CRON JOB FAILED WITH EXCEPTION')
-    console.error('❌ ==========================================')
-    console.error('❌ Error type:', error instanceof Error ? error.constructor.name : typeof error)
-    console.error('❌ Error message:', error instanceof Error ? error.message : 'Unknown error')
-    console.error('❌ Error stack:', error instanceof Error ? error.stack : 'No stack trace')
-    console.error('❌ Full error object:', error)
-    console.error('❌ ==========================================')
+    log('\n❌ ==========================================')
+    log('❌ CRON JOB FAILED WITH EXCEPTION')
+    log('❌ ==========================================')
+    log(`❌ Error type: ${error instanceof Error ? error.constructor.name : typeof error}`)
+    log(`❌ Error message: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    log(`❌ Error stack: ${error instanceof Error ? error.stack : 'No stack trace'}`)
+    log(`❌ Full error object: ${error}`)
+    log('❌ ==========================================')
     
     return NextResponse.json({ 
       error: 'Failed to check URLs',
