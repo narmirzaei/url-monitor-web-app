@@ -99,8 +99,21 @@ async function checkSingleUrl(urlId: number) {
     if (changesDetected) {
       log(`    📧 Changes detected - sending email notification...`)
       try {
+        log(`    📊 Fetching previous content for diff...`)
+        // Get the previous check record to compare content
+        const previousCheck = await prisma.urlCheck.findFirst({
+          where: { 
+            urlId,
+            changesDetected: false // Get the last successful check
+          },
+          orderBy: { createdAt: 'desc' }
+        })
+        
+        const previousContent = previousCheck?.contentPreview || 'No previous content available'
+        log(`    ✅ Previous content fetched (${previousContent.length} chars)`)
+        
         log(`    📤 Sending email via SendGrid...`)
-        await sendChangeNotification(monitoredUrl, checkResult)
+        await sendChangeNotification(monitoredUrl, checkResult, previousContent, content)
         log(`    ✅ Email sent successfully`)
         
         log(`    💾 Creating notification record...`)

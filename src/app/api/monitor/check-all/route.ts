@@ -53,7 +53,18 @@ async function checkSingleUrl(urlId: number) {
 
     if (changesDetected) {
       try {
-        await sendChangeNotification(monitoredUrl, checkResult)
+        // Get the previous check record to compare content
+        const previousCheck = await prisma.urlCheck.findFirst({
+          where: { 
+            urlId,
+            changesDetected: false // Get the last successful check
+          },
+          orderBy: { createdAt: 'desc' }
+        })
+        
+        const previousContent = previousCheck?.contentPreview || 'No previous content available'
+        
+        await sendChangeNotification(monitoredUrl, checkResult, previousContent, content)
         
         await prisma.notification.create({
           data: {
