@@ -7,16 +7,15 @@
     },
     "src/app/api/monitor/check-all/route.ts": {
       "maxDuration": 60
+    },
+    "src/app/api/cron/route.ts": {
+      "maxDuration": 300
     }
   },
   "crons": [
     {
-      "path": "/api/monitor/check-frequent",
+      "path": "/api/cron",
       "schedule": "* * * * *"
-    },
-    {
-      "path": "/api/monitor/check-all",
-      "schedule": "*/15 * * * *"
     }
   ],
   "env": {

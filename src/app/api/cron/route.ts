@@ -107,33 +107,44 @@ async function checkSingleUrl(urlId: number) {
 export async function GET() {
   // Test endpoint to verify the route is working
   return NextResponse.json({
-    message: 'Check all endpoint is working',
+    message: 'Cron endpoint is working',
     timestamp: new Date().toISOString(),
     environment: process.env.NODE_ENV
   })
 }
 
 export async function POST() {
-  console.log('🕐 Main cron job triggered at:', new Date().toISOString())
+  console.log('🕐 Cron job triggered at:', new Date().toISOString())
   
   try {
-    // Check ALL active URLs (this is for manual "Check All" button)
-    const urlsToCheck = await prisma.monitoredUrl.findMany({
+    // Get all active URLs
+    const allActiveUrls = await prisma.monitoredUrl.findMany({
       where: {
         isActive: true
       },
       select: { id: true, checkInterval: true, lastCheck: true }
     })
 
-    console.log(`📊 Found ${urlsToCheck.length} active URLs to check`)
+    console.log(`📊 Found ${allActiveUrls.length} active URLs`)
 
-    // For manual "Check All" button, check ALL URLs regardless of interval
-    const urlsDueForCheck = urlsToCheck.map((url: { id: number; checkInterval: number; lastCheck: Date | null }) => {
-      console.log(`✅ Manual check for URL ${url.id}. Interval: ${url.checkInterval}min`)
-      return url
+    // Filter URLs that are due for checking based on their individual intervals
+    const urlsDueForCheck = allActiveUrls.filter((url: { id: number; checkInterval: number; lastCheck: Date | null }) => {
+      if (!url.lastCheck) return true // Never checked before
+      
+      const intervalMs = url.checkInterval * 60000 // Convert minutes to milliseconds
+      const timeSinceLastCheck = Date.now() - url.lastCheck.getTime()
+      const isDue = timeSinceLastCheck >= intervalMs
+      
+      if (isDue) {
+        console.log(`✅ URL ${url.id} is due for check. Interval: ${url.checkInterval}min, Time since last check: ${Math.round(timeSinceLastCheck / 60000)}min`)
+      } else {
+        console.log(`⏳ URL ${url.id} not due yet. Interval: ${url.checkInterval}min, Time since last check: ${Math.round(timeSinceLastCheck / 60000)}min`)
+      }
+      
+      return isDue
     })
 
-    console.log(`🎯 ${urlsDueForCheck.length} URLs will be checked manually`)
+    console.log(`🎯 ${urlsDueForCheck.length} URLs are due for checking`)
 
     const results = []
 
@@ -153,18 +164,18 @@ export async function POST() {
       }
     }
 
-    console.log(`🏁 Main cron job completed. Checked: ${urlsDueForCheck.length}, Results:`, results)
+    console.log(`🏁 Cron job completed. Checked: ${urlsDueForCheck.length}, Results:`, results)
 
     return NextResponse.json({
       success: true,
       checkedUrls: urlsDueForCheck.length,
-      totalActiveUrls: urlsToCheck.length,
+      totalActiveUrls: allActiveUrls.length,
       results,
       timestamp: new Date().toISOString()
     })
 
   } catch (error) {
-    console.error('Error in check-all API:', error)
+    console.error('❌ Error in cron API:', error)
     return NextResponse.json({ error: 'Failed to check URLs' }, { status: 500 })
   }
-}
+} 
