@@ -165,17 +165,199 @@ async function checkSingleUrl(urlId: number) {
 }
 
 export async function GET() {
-  // Test endpoint to verify the route is working
-  const testMessage = 'Cron endpoint is working - GET request received'
-  console.log(`[CRON-TEST] ${testMessage}`)
-  console.error(`[CRON-TEST-ERROR] ${testMessage}`)
+  // Immediate logging to verify the function is called
+  console.log('[CRON-IMMEDIATE] GET function called')
+  console.error('[CRON-IMMEDIATE-ERROR] GET function called')
+  process.stdout.write('[CRON-IMMEDIATE-STDOUT] GET function called\n')
+  process.stderr.write('[CRON-IMMEDIATE-STDERR] GET function called\n')
   
-  return NextResponse.json({
-    message: testMessage,
-    timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV,
-    logs: 'Check Vercel function logs for [CRON-TEST] messages'
-  })
+  log('🚀 ==========================================')
+  log('🚀 CRON JOB STARTED (GET)')
+  log('🚀 ==========================================')
+  
+  const now = new Date()
+  log(`🕐 Cron job triggered at: ${now.toISOString()}`)
+  log(`🌍 Current timezone offset: ${now.getTimezoneOffset()} minutes`)
+  log(`🕐 Local time: ${now.toString()}`)
+  log(`🕐 UTC time: ${now.toISOString()}`)
+  log(`🕐 Current timestamp (ms): ${now.getTime()}`)
+  
+  try {
+    log('📊 STEP 1: Fetching all active URLs from database...')
+    
+    // Get all active URLs
+    const allActiveUrls = await prisma.monitoredUrl.findMany({
+      where: {
+        isActive: true
+      },
+      select: { id: true, checkInterval: true, lastCheck: true }
+    })
+
+    log(`📊 STEP 1 COMPLETE: Found ${allActiveUrls.length} active URLs`)
+    log('📋 Raw URL data from database:')
+    allActiveUrls.forEach((url: { id: number; checkInterval: number; lastCheck: Date | null }, index: number) => {
+      log(`  ${index + 1}. URL ID: ${url.id}, Interval: ${url.checkInterval}min, Last Check: ${url.lastCheck ? url.lastCheck.toISOString() : 'NULL'}`)
+    })
+
+    log('🔍 STEP 2: Analyzing each URL for timing...')
+    
+    // Filter URLs that are due for checking based on their individual intervals
+    const urlsDueForCheck = allActiveUrls.filter((url: { id: number; checkInterval: number; lastCheck: Date | null }) => {
+      log(`\n🔍 ANALYZING URL ${url.id}:`)
+      log(`  - Check Interval: ${url.checkInterval} minutes`)
+      log(`  - Last Check: ${url.lastCheck ? url.lastCheck.toISOString() : 'NULL (never checked)'}`)
+      
+      if (!url.lastCheck) {
+        log(`  ✅ DECISION: URL ${url.id} has never been checked before - WILL CHECK`)
+        return true // Never checked before
+      }
+      
+      const intervalMs = url.checkInterval * 60000 // Convert minutes to milliseconds
+      log(`  - Interval in milliseconds: ${intervalMs}ms`)
+      
+      // Use UTC time for consistent calculations
+      // Vercel cron jobs run in UTC, so we need to ensure all time calculations are in UTC
+      const nowUtc = new Date().getTime()
+      const lastCheckUtc = url.lastCheck.getTime()
+      const timeSinceLastCheck = nowUtc - lastCheckUtc
+      
+      log(`  - Current UTC timestamp: ${nowUtc}`)
+      log(`  - Last check UTC timestamp: ${lastCheckUtc}`)
+      log(`  - Time since last check: ${timeSinceLastCheck}ms (${Math.round(timeSinceLastCheck / 60000)} minutes)`)
+      
+      // For very frequent checks (1-5 minutes), be more lenient with timing
+      let isDue: boolean
+      let reason: string
+      
+      if (url.checkInterval <= 5) {
+        // For frequent checks, allow checking if it's been at least 80% of the interval
+        const minTimeMs = intervalMs * 0.8
+        isDue = timeSinceLastCheck >= minTimeMs
+        reason = `Frequent check (≤5min): Need ${Math.round(minTimeMs / 60000)}min (80% of ${url.checkInterval}min), have ${Math.round(timeSinceLastCheck / 60000)}min`
+      } else {
+        // For less frequent checks, use the full interval
+        isDue = timeSinceLastCheck >= intervalMs
+        reason = `Less frequent check (>5min): Need ${url.checkInterval}min, have ${Math.round(timeSinceLastCheck / 60000)}min`
+      }
+      
+      log(`  - Decision logic: ${reason}`)
+      
+      if (isDue) {
+        log(`  ✅ DECISION: URL ${url.id} IS DUE FOR CHECK`)
+      } else {
+        log(`  ⏳ DECISION: URL ${url.id} NOT DUE YET`)
+      }
+      
+      return isDue
+    })
+
+    log(`\n🎯 STEP 2 COMPLETE: ${urlsDueForCheck.length} URLs are due for checking`)
+    
+    if (urlsDueForCheck.length === 0) {
+      log('⚠️  No URLs are due for checking at this time')
+    } else {
+      log('📋 URLs that will be checked:')
+      urlsDueForCheck.forEach((url: { id: number; checkInterval: number; lastCheck: Date | null }, index: number) => {
+        log(`  ${index + 1}. URL ID: ${url.id}, Interval: ${url.checkInterval}min`)
+      })
+    }
+    
+    // Log summary of all URLs
+    log('\n📋 FINAL SUMMARY OF ALL URLs:')
+    allActiveUrls.forEach((url: { id: number; checkInterval: number; lastCheck: Date | null }) => {
+      const timeSinceLastCheck = url.lastCheck ? Math.round((new Date().getTime() - url.lastCheck.getTime()) / 60000) : 'Never'
+      const isDue = urlsDueForCheck.some((u: { id: number; checkInterval: number; lastCheck: Date | null }) => u.id === url.id)
+      const lastCheckUtc = url.lastCheck ? url.lastCheck.toISOString() : 'Never'
+      log(`  URL ${url.id}: Interval=${url.checkInterval}min, Last check=${timeSinceLastCheck}min ago (UTC: ${lastCheckUtc}), Due=${isDue}`)
+    })
+    
+    // Additional timezone debugging
+    log('\n🕐 TIMEZONE DEBUG INFO:')
+    log('  - Vercel cron jobs run in UTC')
+    log('  - Database timestamps are stored in UTC')
+    log('  - All time calculations use UTC timestamps')
+    log(`  - Current UTC time: ${new Date().toISOString()}`)
+
+    log('\n🔍 STEP 3: Starting URL checks...')
+    const results = []
+
+    for (const url of urlsDueForCheck) {
+      log(`\n🔍 CHECKING URL ${url.id}:`)
+      log(`  - Starting check at: ${new Date().toISOString()}`)
+      
+      try {
+        log(`  - Calling checkSingleUrl function...`)
+        const result = await checkSingleUrl(url.id)
+        
+        log(`  - Check result received:`)
+        log(`    * Success: ${result.success}`)
+        log(`    * Changes Detected: ${result.changesDetected}`)
+        log(`    * Content Hash: ${result.contentHash ? result.contentHash.substring(0, 8) + '...' : 'N/A'}`)
+        log(`    * Check ID: ${result.checkId || 'N/A'}`)
+        if (result.error) {
+          log(`    * Error: ${result.error}`)
+        }
+        
+        results.push({ urlId: url.id, ...result })
+        log(`  ✅ URL ${url.id} check completed: ${result.success ? 'SUCCESS' : 'FAILED'}`)
+      } catch (error) {
+        log(`  ❌ Exception during URL ${url.id} check: ${error}`)
+        log(`  ❌ Error details: ${error instanceof Error ? error.message : 'Unknown error'}`)
+        log(`  ❌ Error stack: ${error instanceof Error ? error.stack : 'No stack trace'}`)
+        
+        results.push({ 
+          urlId: url.id, 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        })
+      }
+    }
+
+    log(`\n🏁 STEP 3 COMPLETE: URL checking finished`)
+    log(`📊 FINAL STATISTICS:`)
+    log(`  - Total active URLs: ${allActiveUrls.length}`)
+    log(`  - URLs due for checking: ${urlsDueForCheck.length}`)
+    log(`  - URLs actually checked: ${results.length}`)
+    log(`  - Successful checks: ${results.filter(r => r.success).length}`)
+    log(`  - Failed checks: ${results.filter(r => !r.success).length}`)
+    log(`  - Changes detected: ${results.filter(r => r.changesDetected).length}`)
+    
+    log(`\n📋 DETAILED RESULTS:`)
+    results.forEach((result, index) => {
+      log(`  ${index + 1}. URL ${result.urlId}: ${result.success ? 'SUCCESS' : 'FAILED'}${result.changesDetected ? ' (CHANGES DETECTED)' : ''}`)
+      if (result.error) {
+        log(`     Error: ${result.error}`)
+      }
+    })
+    
+    log(`\n🚀 ==========================================`)
+    log(`🚀 CRON JOB COMPLETED SUCCESSFULLY`)
+    log(`🚀 ==========================================`)
+
+    return NextResponse.json({
+      success: true,
+      checkedUrls: urlsDueForCheck.length,
+      totalActiveUrls: allActiveUrls.length,
+      results,
+      timestamp: new Date().toISOString()
+    })
+
+  } catch (error) {
+    log('\n❌ ==========================================')
+    log('❌ CRON JOB FAILED WITH EXCEPTION')
+    log('❌ ==========================================')
+    log(`❌ Error type: ${error instanceof Error ? error.constructor.name : typeof error}`)
+    log(`❌ Error message: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    log(`❌ Error stack: ${error instanceof Error ? error.stack : 'No stack trace'}`)
+    log(`❌ Full error object: ${error}`)
+    log('❌ ==========================================')
+    
+    return NextResponse.json({ 
+      error: 'Failed to check URLs',
+      details: error instanceof Error ? error.message : 'Unknown error',
+      timestamp: new Date().toISOString()
+    }, { status: 500 })
+  }
 }
 
 export async function POST() {
