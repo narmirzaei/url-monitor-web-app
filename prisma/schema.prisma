@@ -35,6 +35,7 @@ model UrlCheck {
   urlId           Int          @map("url_id")
   contentHash     String       @map("content_hash")
   contentPreview  String?      @map("content_preview")
+  fullContent     String?      @map("full_content")
   changesDetected Boolean      @default(false) @map("changes_detected")
   checkTime       DateTime     @default(now()) @map("check_time")
   errorMessage    String?      @map("error_message")

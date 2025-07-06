@@ -75,7 +75,7 @@ ${(() => {
         
         <p style="font-size: 12px; color: #9ca3af; text-align: center;">
           This notification was sent by URL Monitor Web App<br>
-          Check ID: ${checkResult.id} | Content Hash: ${checkResult.content_hash ? checkResult.content_hash.substring(0, 8) + '...' : 'N/A'}
+          Check ID: ${checkResult.id} | Content Hash: ${checkResult.contentHash ? checkResult.contentHash.substring(0, 8) + '...' : 'N/A'}
         </p>
       </div>
     `

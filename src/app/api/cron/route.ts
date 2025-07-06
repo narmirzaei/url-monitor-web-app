@@ -81,6 +81,7 @@ async function checkSingleUrl(urlId: number) {
         urlId,
         contentHash,
         contentPreview,
+        fullContent: content, // Store the full content for diff comparison
         changesDetected: !!changesDetected
       }
     })
@@ -109,7 +110,7 @@ async function checkSingleUrl(urlId: number) {
           orderBy: { checkTime: 'desc' }
         })
         
-        const previousContent = previousCheck?.contentPreview || 'No previous content available'
+        const previousContent = previousCheck?.fullContent || previousCheck?.contentPreview || 'No previous content available'
         log(`    ✅ Previous content fetched (${previousContent.length} chars)`)
         
         log(`    📤 Sending email via SendGrid...`)
