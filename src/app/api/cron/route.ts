@@ -87,16 +87,6 @@ async function checkSingleUrl(urlId: number) {
     })
     log(`    ✅ URL check record created with ID: ${checkResult.id}`)
 
-    log(`    🔄 Updating URL last check timestamp...`)
-    await prisma.monitoredUrl.update({
-      where: { id: urlId },
-      data: {
-        lastContentHash: contentHash,
-        lastCheck: new Date() // This will be stored as UTC in the database
-      }
-    })
-    log(`    ✅ URL last check timestamp updated`)
-
     if (changesDetected) {
       log(`    📧 Changes detected - sending email notification...`)
       try {
@@ -146,6 +136,17 @@ async function checkSingleUrl(urlId: number) {
     } else {
       log(`    ℹ️  No changes detected - skipping email notification`)
     }
+
+    // Update the URL's last check timestamp and content hash AFTER processing changes
+    log(`    🔄 Updating URL last check timestamp...`)
+    await prisma.monitoredUrl.update({
+      where: { id: urlId },
+      data: {
+        lastContentHash: contentHash,
+        lastCheck: new Date() // This will be stored as UTC in the database
+      }
+    })
+    log(`    ✅ URL last check timestamp updated`)
 
     log(`    ✅ checkSingleUrl(${urlId}) - Completed successfully`)
     return {

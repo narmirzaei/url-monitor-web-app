@@ -44,14 +44,6 @@ async function checkSingleUrl(urlId: number) {
       }
     })
 
-    await prisma.monitoredUrl.update({
-      where: { id: urlId },
-      data: {
-        lastContentHash: contentHash,
-        lastCheck: new Date()
-      }
-    })
-
     if (changesDetected) {
       try {
         // Get the previous check record to compare content
@@ -89,6 +81,15 @@ async function checkSingleUrl(urlId: number) {
         })
       }
     }
+
+    // Update the URL's last check timestamp and content hash AFTER processing changes
+    await prisma.monitoredUrl.update({
+      where: { id: urlId },
+      data: {
+        lastContentHash: contentHash,
+        lastCheck: new Date()
+      }
+    })
 
     return {
       success: true,
