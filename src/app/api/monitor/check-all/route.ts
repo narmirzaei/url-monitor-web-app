@@ -57,9 +57,10 @@ async function checkSingleUrl(urlId: number) {
         const previousCheck = await prisma.urlCheck.findFirst({
           where: { 
             urlId,
-            changesDetected: false // Get the last successful check
+            // Don't filter by changesDetected - get the most recent check
           },
-          orderBy: { checkTime: 'desc' }
+          orderBy: { checkTime: 'desc' },
+          skip: 1 // Skip the current check, get the previous one
         })
         
         const previousContent = previousCheck?.contentPreview || 'No previous content available'
