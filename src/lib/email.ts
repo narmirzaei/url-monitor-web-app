@@ -14,6 +14,39 @@ export async function sendChangeNotification(monitoredUrl: any, checkResult: any
     throw new Error('Notification email not configured')
   }
 
+  // Pre-compute diff values to avoid issues with template literals
+  let diffSection = ''
+  if (previousContent && currentContent) {
+    console.log('📧 EMAIL DEBUG: Generating diff for email...')
+    console.log('📧 EMAIL DEBUG: Previous content length:', previousContent.length)
+    console.log('📧 EMAIL DEBUG: Current content length:', currentContent.length)
+    
+    const diffResult = generateEmailDiff(previousContent, currentContent)
+    console.log('📧 EMAIL DEBUG: Diff result:', diffResult)
+    
+    const diffHtml = diffResult.hasChanges 
+      ? diffResult.diff.replace(/\n/g, '<br>').replace(/❌/g, '<span style="color: #dc2626;">❌</span>').replace(/✅/g, '<span style="color: #16a34a;">✅</span>')
+      : generateSimpleDiff(previousContent, currentContent).replace(/\n/g, '<br>')
+    
+    diffSection = `
+        <div style="background-color: #f0f9ff; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #0ea5e9;">
+          <h3 style="margin: 0 0 10px 0; color: #0c4a6e;">Content Changes</h3>
+          <div style="background-color: white; padding: 15px; border-radius: 6px; border: 1px solid #e0e7ff;">
+            <h4 style="margin: 0 0 10px 0; color: #3730a3;">Change Summary</h4>
+            <p style="margin: 0 0 15px 0; color: #6b7280; font-size: 14px;">${diffResult.summary}</p>
+            
+            <h4 style="margin: 0 0 10px 0; color: #3730a3;">Detailed Changes</h4>
+            <div style="background-color: #f8fafc; padding: 10px; border-radius: 4px; font-family: monospace; font-size: 12px; white-space: pre-wrap; max-height: 300px; overflow-y: auto; border: 1px solid #e2e8f0;">
+              ${diffHtml}
+            </div>
+          </div>
+        </div>
+    `
+    console.log('📧 EMAIL DEBUG: Diff section generated, length:', diffSection.length)
+  } else {
+    console.log('📧 EMAIL DEBUG: No previous or current content provided for diff')
+  }
+
   const msg = {
     to: process.env.NOTIFICATION_EMAIL,
     from: process.env.FROM_EMAIL || process.env.NOTIFICATION_EMAIL,
@@ -34,30 +67,7 @@ export async function sendChangeNotification(monitoredUrl: any, checkResult: any
           <p style="color: #92400e;">Content has changed since the last check. Please review the website for updates.</p>
         </div>
 
-        ${previousContent && currentContent ? `
-        <div style="background-color: #f0f9ff; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #0ea5e9;">
-          <h3 style="margin: 0 0 10px 0; color: #0c4a6e;">Content Changes</h3>
-          <div style="background-color: white; padding: 15px; border-radius: 6px; border: 1px solid #e0e7ff;">
-            <h4 style="margin: 0 0 10px 0; color: #3730a3;">Change Summary</h4>
-            <p style="margin: 0 0 15px 0; color: #6b7280; font-size: 14px;">${(() => {
-              const diffResult = generateEmailDiff(previousContent, currentContent)
-              return diffResult.summary
-            })()}</p>
-            
-            <h4 style="margin: 0 0 10px 0; color: #3730a3;">Detailed Changes</h4>
-            <div style="background-color: #f8fafc; padding: 10px; border-radius: 4px; font-family: monospace; font-size: 12px; white-space: pre-wrap; max-height: 300px; overflow-y: auto; border: 1px solid #e2e8f0;">
-${(() => {
-  const diffResult = generateEmailDiff(previousContent, currentContent)
-  if (diffResult.hasChanges) {
-    return diffResult.diff.replace(/\n/g, '<br>').replace(/❌/g, '<span style="color: #dc2626;">❌</span>').replace(/✅/g, '<span style="color: #16a34a;">✅</span>')
-  } else {
-    return generateSimpleDiff(previousContent, currentContent).replace(/\n/g, '<br>')
-  }
-})()}
-            </div>
-          </div>
-        </div>
-        ` : ''}
+        ${diffSection}
 
         <div style="background-color: #f9fafb; padding: 20px; border-radius: 8px; margin: 20px 0;">
           <h3 style="margin: 0 0 10px 0; color: #1f2937;">Content Preview</h3>
@@ -81,5 +91,7 @@ ${(() => {
     `
   }
 
+  console.log('📧 EMAIL DEBUG: About to send email with diff section length:', diffSection.length)
   await sgMail.send(msg)
+  console.log('📧 EMAIL DEBUG: Email sent successfully')
 }
