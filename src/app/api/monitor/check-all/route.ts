@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { extractPageContent, generateContentHash } from '@/lib/browser'
-import { extractContentSimple } from '@/lib/content-extractor'
+import { extractContentSimple, extractContentWithAlternatives } from '@/lib/content-extractor'
 import { sendChangeNotification } from '@/lib/email'
 
 // Retry mechanism with different strategies
@@ -27,6 +27,16 @@ async function extractContentWithRetry(url: string, maxRetries = 3): Promise<str
         return await extractContentSimple(url)
       } catch (simpleError) {
         console.log(`Simple extraction attempt ${attempt + 1} failed:`, simpleError)
+        
+        // If it's a 403 error, try alternative extraction methods
+        if (simpleError instanceof Error && simpleError.message.includes('403')) {
+          console.log('403 error detected, trying alternative extraction methods...')
+          try {
+            return await extractContentWithAlternatives(url)
+          } catch (altError) {
+            console.log('Alternative extraction also failed:', altError)
+          }
+        }
         
         // Only try Playwright as a last resort
         if (attempt === maxRetries - 1) {
