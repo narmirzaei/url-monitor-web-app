@@ -4,6 +4,53 @@ import { extractPageContent, generateContentHash } from '@/lib/browser'
 import { extractContentSimple } from '@/lib/content-extractor'
 import { sendChangeNotification } from '@/lib/email'
 
+// Retry mechanism with different strategies
+async function extractContentWithRetry(url: string, maxRetries = 3): Promise<string> {
+  const userAgents = [
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15'
+  ]
+
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      console.log(`Attempt ${attempt + 1} for URL: ${url}`)
+      
+      // Add delay between retries
+      if (attempt > 0) {
+        await new Promise(resolve => setTimeout(resolve, 2000 * attempt))
+      }
+
+      // Try Playwright first
+      try {
+        return await extractPageContent(url)
+      } catch (playwrightError) {
+        console.log(`Playwright attempt ${attempt + 1} failed:`, playwrightError)
+        
+        // If it's a 403 error, try with different user agent
+        if (playwrightError instanceof Error && playwrightError.message.includes('403')) {
+          console.log('403 error detected, trying simple extraction...')
+          return await extractContentSimple(url)
+        }
+        
+        // For other errors, try simple extraction as fallback
+        if (attempt === maxRetries - 1) {
+          return await extractContentSimple(url)
+        }
+      }
+    } catch (error) {
+      console.log(`Attempt ${attempt + 1} failed:`, error)
+      
+      if (attempt === maxRetries - 1) {
+        throw error
+      }
+    }
+  }
+  
+  throw new Error('All extraction attempts failed')
+}
+
 export async function POST(request: NextRequest) {
   try {
     const { urlId } = await request.json()
@@ -24,16 +71,7 @@ export async function POST(request: NextRequest) {
     }
     
     try {
-      let content: string
-      try {
-        // Try Playwright first
-        content = await extractPageContent(monitoredUrl.url)
-      } catch (playwrightError) {
-        console.log('Playwright failed, using fallback method:', playwrightError)
-        // Fallback to simple HTTP extraction
-        content = await extractContentSimple(monitoredUrl.url)
-      }
-      
+      const content = await extractContentWithRetry(monitoredUrl.url)
       const contentHash = generateContentHash(content)
       
       const previousHash = monitoredUrl.lastContentHash
