@@ -22,21 +22,21 @@ async function extractContentWithRetry(url: string, maxRetries = 3): Promise<str
         await new Promise(resolve => setTimeout(resolve, 2000 * attempt))
       }
 
-      // Try Playwright first
+      // Try simple HTTP extraction first (more reliable in Vercel)
       try {
-        return await extractPageContent(url)
-      } catch (playwrightError) {
-        console.log(`Playwright attempt ${attempt + 1} failed:`, playwrightError)
+        return await extractContentSimple(url)
+      } catch (simpleError) {
+        console.log(`Simple extraction attempt ${attempt + 1} failed:`, simpleError)
         
-        // If it's a 403 error, try with different user agent
-        if (playwrightError instanceof Error && playwrightError.message.includes('403')) {
-          console.log('403 error detected, trying simple extraction...')
-          return await extractContentSimple(url)
-        }
-        
-        // For other errors, try simple extraction as fallback
+        // Only try Playwright as a last resort
         if (attempt === maxRetries - 1) {
-          return await extractContentSimple(url)
+          try {
+            console.log('Trying Playwright as final fallback...')
+            return await extractPageContent(url)
+          } catch (playwrightError) {
+            console.log('Playwright also failed:', playwrightError)
+            throw simpleError // Throw the original simple error
+          }
         }
       }
     } catch (error) {
